@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 import * as cp from 'child_process';
+import * as fs from 'fs';
 import * as inquirer from 'inquirer';
 import * as path from 'path';
+import { ncp } from 'ncp';
+import * as util from 'util';
 
 import {
   getPkgManagerCommand,
   readFilep as read,
   readJsonp as readJson,
   writeFileAtomicp as write,
-  createSrcDir,
-  copyTemplate,
   Bag,
   DefaultPackage,
 } from './util';
@@ -33,6 +34,8 @@ import { PackageJson } from '@npm/types';
 import chalk from 'chalk';
 
 const pkg = require('../../package.json');
+
+const ncpp = util.promisify(ncp);
 
 const DEFAULT_PACKAGE_JSON: PackageJson = {
   name: '',
@@ -248,14 +251,29 @@ export async function installDefaultTemplate(
   const cwd = process.cwd();
   const sourceDirName = path.join(__dirname, '../template');
   const targetDirName = path.join(cwd, 'src');
-  if ((await createSrcDir(targetDirName, options)) === true) {
-    if ((await copyTemplate(sourceDirName, targetDirName, options)) === true) {
-      options.logger.log('Default template installed.');
-      return true;
+
+  try {
+    fs.mkdirSync(targetDirName);
+  } catch (error) {
+    if (error.code !== 'EEXIST') {
+      throw error;
     }
+    // Else, continue and populate files into the existing directory.
   }
-  options.logger.log('Template install: abandon.');
-  return false;
+
+  // Only install the template if no ts files exist in target directory.
+  const files = fs.readdirSync(targetDirName);
+  const tsFiles = files.filter(file => file.toLowerCase().endsWith('.ts'));
+  if (tsFiles.length !== 0) {
+    options.logger.log(
+      'Target src directory already has ts files. ' +
+        'Template files not installed.'
+    );
+    return false;
+  }
+  await ncpp(sourceDirName, targetDirName);
+  options.logger.log('Default template installed.');
+  return true;
 }
 
 export async function init(options: Options): Promise<boolean> {

@@ -17,6 +17,7 @@
 import * as sinon from 'sinon';
 import * as cp from 'child_process';
 import * as assert from 'assert';
+import * as fs from 'fs';
 import * as path from 'path';
 import { nop, readJsonp as readJson, DefaultPackage } from '../src/util';
 import { Options } from '../src/cli';
@@ -206,11 +207,77 @@ describe('init', () => {
 
   it('should install a default template if the source directory do not exists', () => {
     return withFixtures({}, async dir => {
-      const indexPath = path.join(dir, 'src/index.ts');
+      const indexPath = path.join(dir, 'src', 'index.ts');
       await init.init(OPTIONS_YES);
       assert.doesNotThrow(() => {
         accessSync(indexPath);
       });
+    });
+  });
+
+  it('should install template copy if src directory already exists and is empty', () => {
+    const FIXTURES = {
+      src: {},
+    };
+    return withFixtures(FIXTURES, async dir => {
+      const dirPath = path.join(dir, 'src');
+      const created = await init.installDefaultTemplate(OPTIONS_YES);
+      assert.strictEqual(created, true);
+      assert.doesNotThrow(() => {
+        accessSync(path.join(dirPath, 'index.ts'));
+      });
+    });
+  });
+
+  it('should install template copy if src directory already exists and contains files other than ts', () => {
+    const FIXTURES = {
+      src: {
+        'README.md': '# Read this',
+      },
+    };
+    return withFixtures(FIXTURES, async dir => {
+      const dirPath = path.join(dir, 'src');
+      const created = await init.installDefaultTemplate(OPTIONS_YES);
+      assert.strictEqual(created, true);
+      assert.doesNotThrow(() => {
+        // Both old and new files should exist.
+        accessSync(path.join(dirPath, 'README.md'));
+        accessSync(path.join(dirPath, 'index.ts'));
+      });
+    });
+  });
+
+  it('should copy the template with correct contents', () => {
+    const FIXTURES = {
+      src: {},
+    };
+    return withFixtures(FIXTURES, async dir => {
+      const destDir = path.join(dir, 'src');
+      const created = await init.installDefaultTemplate(OPTIONS_YES);
+      assert.strictEqual(created, true);
+
+      // make sure the target directory exists.
+      accessSync(destDir);
+
+      // make sure the copied file exists and has the same content.
+      const srcFilename = path.join(__dirname, '../template/index.ts');
+      const destFilename = path.join(destDir, 'index.ts');
+      const content = fs.readFileSync(destFilename, 'utf8');
+      assert.strictEqual(content, fs.readFileSync(srcFilename, 'utf8'));
+    });
+  });
+
+  it('should not install the default template if the source directory is not accessible', () => {
+    const FIXTURES: Fixtures = {
+      src: {
+        mode: 0o000,
+        content: {
+          'README.md': 'Hello World.',
+        },
+      },
+    };
+    return withFixtures(FIXTURES, async dir => {
+      assert.rejects(init.installDefaultTemplate(OPTIONS_YES), 'EACCESS');
     });
   });
 

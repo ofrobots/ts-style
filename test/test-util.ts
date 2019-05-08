@@ -21,8 +21,6 @@ import {
   ConfigFile,
   getTSConfig,
   isYarnUsed,
-  createSrcDir,
-  copyTemplate,
   getPkgManagerCommand,
 } from '../src/util';
 
@@ -51,13 +49,6 @@ function makeFakeFsExistsSync(
   return (path: PathLike) => expected.some(item => item === path);
 }
 
-async function srcDirCheck(path: string, expected = true) {
-  const created = await createSrcDir(path);
-  assert.strictEqual(created, expected);
-  assert.doesNotThrow(() => {
-    accessSync(path);
-  });
-}
 const FAKE_DIRECTORY = '/some/fake/directory';
 const PATH_TO_TSCONFIG = path.resolve(FAKE_DIRECTORY, 'tsconfig.json');
 const PATH_TO_CONFIG2 = path.resolve(FAKE_DIRECTORY, 'FAKE_CONFIG2');
@@ -200,104 +191,4 @@ describe('util', () => {
   it('getPkgManagerCommand returns yarn', () => {
     assert.strictEqual(getPkgManagerCommand(true), yarnCmd);
   });
-
-  it('should copy the template', () => {
-    const SOURCE = 'sourceDirectory';
-    const DEST = 'destDirectory';
-    const WRONG = 'wrongDirectory';
-    const FIXTURES = {
-      [SOURCE]: {
-        'index.ts': '42;',
-      },
-    };
-    return withFixtures(FIXTURES, async dir => {
-      const sourcePath = path.join(dir, SOURCE);
-      const destPath = path.join(dir, DEST);
-      const wrongPath = path.join(dir, WRONG);
-
-      // make sure the source directory exists.
-      accessSync(sourcePath);
-      const copied = await copyTemplate(sourcePath, destPath);
-      assert.strictEqual(copied, true);
-
-      // make sure the target directory exists.
-      accessSync(destPath);
-
-      // make sure the copied file exists and has the same content.
-      const destFilename = path.join(destPath, 'index.ts');
-      const content = readFileSync(destFilename, 'utf8');
-      const same: string = FIXTURES[SOURCE]['index.ts'];
-      assert.strictEqual(content, same);
-
-      // make sure return false if can't copy.
-      const wrongResult = await copyTemplate(wrongPath, destPath);
-      assert.strictEqual(wrongResult, false);
-    });
-  });
-
-  it('should create the source directory if not existing', () => {
-    const NOTEXISTING = 'newDirectory';
-    return withFixtures({}, async dir => {
-      const newPath = path.join(dir, NOTEXISTING);
-      await srcDirCheck(newPath);
-    });
-  });
-
-  it('should allow template copy if src directory already exists and is empty', () => {
-    const EMPTY = 'emptyDirectory';
-    const FIXTURES = {
-      [EMPTY]: {},
-    };
-    return withFixtures(FIXTURES, async dir => {
-      const dirPath = path.join(dir, EMPTY);
-      await srcDirCheck(dirPath);
-    });
-  });
-
-  it('should allow template copy if src directory already exists and contains files other than ts', () => {
-    const EXISTING = 'sourceDirectory';
-    const FIXTURES = {
-      [EXISTING]: {
-        'README.md': '# Read this',
-      },
-    };
-    return withFixtures(FIXTURES, async dir => {
-      const dirPath = path.join(dir, EXISTING);
-      await srcDirCheck(dirPath);
-    });
-  });
-
-  it('should not allow template copy if src directory already exists and contains ts files ', () => {
-    const EXISTING = 'sourceDirectory';
-    const FIXTURES = {
-      [EXISTING]: {
-        'index.ts': '42;',
-      },
-    };
-    return withFixtures(FIXTURES, async dir => {
-      const dirPath = path.join(dir, EXISTING);
-      await srcDirCheck(dirPath, false);
-    });
-  });
-
-  it('should not allow template copy if src directory is not accessible', () => {
-    const FIXTURES = {
-      private: {
-        mode: 0o000,
-        content: {
-          'README.md': 'Hello World.',
-        },
-      },
-    };
-    return withFixtures(FIXTURES, async dir => {
-      const dirPath = path.join(dir, 'private', 'newDirectory');
-      const created = await createSrcDir(dirPath);
-      assert.strictEqual(created, false);
-      assert.throws(() => {
-        accessSync(dirPath);
-      });
-    });
-  });
-
-  // TODO: test errors in readFile, JSON.parse.
 });
